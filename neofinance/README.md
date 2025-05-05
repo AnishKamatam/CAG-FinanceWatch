@@ -1,36 +1,108 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CAG-FinanceWatch
+
+A smart financial analysis system that uses Plaid to fetch real transaction data and provides AI-powered financial advice.
+
+## Features
+
+- 🔄 Real-time transaction fetching from Plaid
+- 📊 Transaction categorization and analysis
+- 🤖 AI-powered financial advice using Perplexity
+- 💾 Transaction data persistence
+- 🔍 Detailed spending insights
+
+## System Architecture
+
+The system consists of several key components:
+
+1. **Plaid Integration** (`/app/api/plaid/`)
+   - Handles Plaid authentication and token management
+   - Fetches real transaction data from connected bank accounts
+   - Transforms Plaid data into a standardized format
+
+2. **Financial Analysis** (`/lib/finance.ts`)
+   - Processes transaction data
+   - Generates spending summaries by category
+   - Provides financial insights
+
+3. **AI Advisory** (`/app/api/advice/`)
+   - Uses Perplexity AI to analyze spending patterns
+   - Generates personalized financial advice
+   - Caches analysis results for performance
+
+4. **Data Storage** (`/data/`)
+   - Stores transaction data in JSON format
+   - Maintains historical spending records
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Node.js 18+ installed
+- Plaid API credentials
+- Perplexity API key
+- Redis instance (for caching)
+
+### Environment Setup
+
+Create a `.env` file in the root directory with:
+
+```env
+PLAID_CLIENT_ID=your_client_id
+PLAID_SECRET=your_secret
+PLAID_ENV=sandbox
+PERPLEXITY_API_KEY=your_perplexity_key
+REDIS_URL=your_redis_url
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Install dependencies:
+```bash
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. Start the development server:
+```bash
+npm run dev
+```
 
-## Learn More
+3. Test the system:
+```bash
+node testplaid.js  # Test Plaid integration
+node testcag.js    # Test financial advice
+```
 
-To learn more about Next.js, take a look at the following resources:
+## API Endpoints
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### `/api/plaid/transactions`
+- **POST**: Fetches and stores transactions from Plaid
+- **Body**: `{ access_token: string }`
+- **Response**: `{ success: boolean, transactions: Transaction[] }`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### `/api/advice`
+- **POST**: Generates financial advice based on transactions
+- **Body**: `{ userId: string, userInput: string }`
+- **Response**: `{ advice: string }`
 
-## Deploy on Vercel
+## Data Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Transactions are stored in the following format:
+```typescript
+interface Transaction {
+  date: string;      // YYYY-MM-DD
+  category: string;  // Transaction category
+  amount: number;    // Transaction amount
+}
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

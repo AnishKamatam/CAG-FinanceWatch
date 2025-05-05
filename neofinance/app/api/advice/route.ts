@@ -1,74 +1,91 @@
+/**
+ * Financial Advice API Endpoint
+ * 
+ * This endpoint provides AI-powered financial advice based on transaction data.
+ * It uses Perplexity AI to analyze spending patterns and generate personalized
+ * recommendations. Results are cached to improve performance.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
-import axios from "axios";
-import { getMonthlySummary } from "../../../lib/finance";
-import { getCachedSummary, cacheSummary } from "../../../lib/cache";
-import { generatePrompt } from "../../../utils/prompt";
+import { getTransactions, getMonthlySummary } from "../../../lib/finance";
+import { Redis } from '@upstash/redis';
+
+// Initialize Redis client for caching
+const redis = new Redis({
+  url: process.env.REDIS_URL!,
+  token: process.env.REDIS_TOKEN!,
+});
+
+/**
+ * Generates a prompt for the AI based on transaction data and user input
+ */
+function generatePrompt(summary: Record<string, number>, userInput: string): string {
+  return `
+  You're a smart, friendly personal finance assistant.
+  
+  Here's what the user spent recently:
+  ${JSON.stringify(summary, null, 2)}
+  
+  Now they asked:
+  "${userInput}"
+  
+  Give helpful, personalized budgeting advice.
+  `;
+}
 
 export async function POST(req: NextRequest) {
-  console.log("✅ ROUTE HIT /api/advice");
-
+  console.log('✅ ROUTE HIT /api/advice');
+  
   try {
+    // Extract user input from request
     const { userId, userInput } = await req.json();
-    console.log("🟢 Received input:", { userId, userInput });
+    console.log('🟢 Received input:', { userId, userInput });
 
-    const perplexityKey = process.env.PERPLEXITY_API_KEY;
-    console.log("🔐 Perplexity Key (exists?):", !!perplexityKey);
-
-    if (!perplexityKey) {
-      return NextResponse.json({ error: "Missing API key" }, { status: 500 });
+    // Check if we have a cached response
+    const cacheKey = `advice:${userId}:${userInput}`;
+    const cachedAdvice = await redis.get(cacheKey);
+    
+    if (cachedAdvice) {
+      console.log('🟡 Retrieved cached summary:', cachedAdvice);
+      return NextResponse.json({ advice: cachedAdvice });
     }
 
-    const cached = await getCachedSummary(userId);
-    console.log("🟡 Retrieved cached summary:", cached);
+    // Get transaction data and generate summary
+    console.log('🟠 Caching new summary...');
+    const transactions = await getTransactions();
+    const summary = getMonthlySummary(transactions);
 
-    const summary = cached || JSON.stringify(getMonthlySummary(), null, 2);
-
-    if (!cached) {
-      console.log("🟠 Caching new summary...");
-      await cacheSummary(userId, summary);
-    }
-
+    // Generate AI prompt
     const prompt = generatePrompt(summary, userInput);
-    console.log("🧠 Prompt:\n", prompt);
+    console.log('🧠 Prompt:', prompt);
 
-    const response = await axios.post(
-      "https://api.perplexity.ai/chat/completions",
-      {
-        model: "sonar-pro",
-        messages: [{ role: "user", content: prompt }]
+    // Call Perplexity API
+    console.log('🔐 Perplexity Key (exists?):', !!process.env.PERPLEXITY_API_KEY);
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
       },
-      {
-        headers: {
-          Authorization: `Bearer ${perplexityKey}`,
-          "Content-Type": "application/json"
-        }
-      }
+      body: JSON.stringify({
+        model: 'sonar-medium-online',
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    const data = await response.json();
+    const advice = data.choices[0].message.content;
+
+    // Cache the response
+    await redis.set(cacheKey, advice, { ex: 3600 }); // Cache for 1 hour
+
+    console.log('✅ Perplexity response:', advice);
+    return NextResponse.json({ advice });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to generate advice' },
+      { status: 500 }
     );
-
-    const result = response.data.choices?.[0]?.message?.content;
-    console.log("✅ Perplexity response:", result);
-
-    return NextResponse.json({ advice: result });
-
-  } catch (error: any) {
-    console.error("❌ Error in /api/advice:");
-    console.error("🔴 FULL ERROR:");
-    console.error(error); // Full error object dump
-
-    if (axios.isAxiosError(error)) {
-      if (error.response) {
-        console.error("🟥 Perplexity Error Response:");
-        console.error("Status:", error.response.status);
-        console.error("Data:", error.response.data);
-      } else if (error.request) {
-        console.error("🟧 No response received from Perplexity.");
-      } else {
-        console.error("🟨 Axios setup error:", error.message);
-      }
-    } else {
-      console.error("🟫 Unknown error:", error.message || error);
-    }
-
-    return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   }
 }
